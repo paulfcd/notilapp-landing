@@ -30,9 +30,35 @@ footer{display:flex;align-items:center;justify-content:space-between;gap:6px 24p
 footer a{color:#EEF2F6;font-size:14px;letter-spacing:.01em;text-underline-offset:4px;min-height:44px;display:inline-flex;align-items:center}
 footer a:hover{color:#fff}
 a:focus-visible{outline:2px solid #EEF2F6;outline-offset:4px}
+main{flex-direction:column;align-items:flex-start;justify-content:center;gap:clamp(28px,3.6vw,44px)}
+.cta{font:inherit;font-size:15px;font-weight:500;color:#070D14;background:#EEF2F6;border:0;border-radius:999px;min-height:50px;padding:0 26px;cursor:pointer}
+.cta:hover{background:#fff}
+button:focus-visible,input:focus-visible{outline:2px solid #EEF2F6;outline-offset:3px}
+dialog{width:min(440px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto;margin:auto;padding:clamp(24px,4vw,34px);background:#0B141E;color:#EEF2F6;border:1px solid rgba(238,242,246,.14);border-radius:20px;font-family:inherit}
+dialog::backdrop{background:rgba(4,8,13,.62);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.dhead{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:26px}
+dialog h2{margin:0;font-weight:400;font-size:28px;line-height:1.1;letter-spacing:-.04em}
+.x{font:inherit;font-size:24px;line-height:1;color:#C3CEDA;background:none;border:0;width:44px;height:44px;margin:-10px -12px 0 0;cursor:pointer;border-radius:999px}
+.x:hover{color:#fff}
+form{display:grid;grid-template-columns:1fr 1fr;gap:20px 16px}
+.f{display:flex;flex-direction:column;gap:6px}
+.f.w{grid-column:1/-1}
+.f label{font-size:11px;font-weight:500;letter-spacing:.18em;color:#C3CEDA}
+.f input{font:inherit;font-size:16px;color:#EEF2F6;background:transparent;border:0;border-bottom:1px solid rgba(238,242,246,.34);border-radius:0;padding:8px 0;min-height:44px;width:100%}
+.f input:focus{border-bottom-color:#EEF2F6;outline:none}
+.ck{grid-column:1/-1;display:flex;align-items:flex-start;gap:12px;font-size:15px;line-height:1.4;cursor:pointer;padding:6px 0}
+.ck input{width:20px;height:20px;margin:1px 0 0;accent-color:#EEF2F6;flex:none}
+form .cta{grid-column:1/-1;width:100%}
+.cta[disabled]{opacity:.6;cursor:default}
+.note{grid-column:1/-1;margin:0;font-size:12px;line-height:1.5;color:#9FAEBD}
+.err{grid-column:1/-1;margin:0;font-size:14px;color:#FFB4A8}
+.ok p{margin:0;font-size:17px;line-height:1.5;color:#DCE4EC}
+[hidden]{display:none!important}
+@media (max-width:420px){form{grid-template-columns:1fr}}
+
 @media (max-width:640px){
   .shade{background:linear-gradient(180deg,rgba(7,13,20,.7) 0%,rgba(7,13,20,.45) 45%,rgba(7,13,20,.15) 70%,rgba(7,13,20,.6) 100%)}
-  main{align-items:flex-start;padding-top:12vh}
+  main{justify-content:flex-start;padding-top:12vh}
 }
 </style>
 </head>
@@ -52,6 +78,7 @@ a:focus-visible{outline:2px solid #EEF2F6;outline-offset:4px}
     </header>
     <main>
       <h1>Ton activité nautique, réservée en 2&nbsp;clics.</h1>
+      <button class="cta" type="button" id="open">Rejoindre la liste d’attente</button>
     </main>
     <footer>
       <span>© 2026 NOTIL</span>
@@ -59,8 +86,62 @@ a:focus-visible{outline:2px solid #EEF2F6;outline-offset:4px}
     </footer>
   </div>
 </div>
+
+<dialog id="wl" aria-labelledby="wl-t">
+  <div class="dhead">
+    <h2 id="wl-t">Liste d’attente</h2>
+    <button class="x" type="button" id="close" aria-label="Fermer">×</button>
+  </div>
+  <form id="wl-f" novalidate>
+    <div class="f"><label for="fn">PRÉNOM</label><input id="fn" name="prenom" autocomplete="given-name" required></div>
+    <div class="f"><label for="ln">NOM</label><input id="ln" name="nom" autocomplete="family-name" required></div>
+    <div class="f w"><label for="em">EMAIL</label><input id="em" name="email" type="email" autocomplete="email" inputmode="email" required></div>
+    <label class="ck"><input type="checkbox" name="consent" id="ok" required><span>Tiens-moi au courant du lancement de Notil</span></label>
+    <input name="site" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">
+    <p class="err" id="err" role="alert" hidden></p>
+    <button class="cta" type="submit" id="send">Je m’inscris</button>
+    <p class="note">Pour te désinscrire : paulfourcard@gmail.com</p>
+  </form>
+  <div class="ok" id="done" hidden><p id="done-t"></p></div>
+</dialog>
 <script>
 if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { var v=document.querySelector('video'); v.removeAttribute('autoplay'); v.pause(); }
+
+/* Liste d'attente : envoi au webhook n8n, qui crée la ligne dans Airtable (Répondants B2C).
+   Hors notilapp.com (aperçu, maquette), rien n'est envoyé. */
+var ENDPOINT = /(^|\.)notilapp\.com$/.test(location.hostname) ? 'https://n8n.eta-ventures.com/webhook/notil-liste-attente' : '';
+(function(){
+  var d=document.getElementById('wl'), f=document.getElementById('wl-f'), err=document.getElementById('err'),
+      done=document.getElementById('done'), send=document.getElementById('send');
+  document.getElementById('open').addEventListener('click',function(){
+    f.hidden=false; done.hidden=true; err.hidden=true; document.getElementById('wl-t').textContent='Liste d\u2019attente';
+    if(d.showModal){d.showModal();}else{d.setAttribute('open','');}
+    document.getElementById('fn').focus();
+  });
+  function close(){ if(d.close){d.close();}else{d.removeAttribute('open');} }
+  document.getElementById('close').addEventListener('click',close);
+  d.addEventListener('click',function(e){ if(e.target===d) close(); });
+  function fail(m){ err.textContent=m; err.hidden=false; }
+  f.addEventListener('submit',function(e){
+    e.preventDefault(); err.hidden=true;
+    var data={prenom:f.prenom.value.trim(),nom:f.nom.value.trim(),email:f.email.value.trim(),consent:f.consent.checked};
+    if(!data.prenom||!data.nom) return fail('Indique ton prénom et ton nom.');
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) return fail('Vérifie ton adresse email.');
+    if(!data.consent) return fail('Coche la case pour qu\u2019on puisse te prévenir.');
+    function success(){
+      f.hidden=true; f.reset(); send.disabled=false;
+      document.getElementById('wl-t').textContent='C\u2019est noté.';
+      document.getElementById('done-t').textContent='Merci '+data.prenom+', on te prévient dès le lancement.';
+      done.hidden=false;
+    }
+    if(f.site.value) return success();
+    if(!ENDPOINT) return success();
+    send.disabled=true;
+    fetch(ENDPOINT,{method:'POST',body:new URLSearchParams({prenom:data.prenom,nom:data.nom,email:data.email,consent:'oui',source:'Landing page - Liste d\u2019attente'})})
+      .then(function(r){ if(!r.ok) throw 0; success(); })
+      .catch(function(){ send.disabled=false; fail('L\u2019envoi a échoué. Réessaie dans un instant.'); });
+  });
+})();
 </script>
 </body>
 </html>
